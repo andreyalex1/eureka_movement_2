@@ -22,14 +22,16 @@ class ackermann(Node):
         self.pub = self.create_publisher(UInt8MultiArray, 'can_tx', 10)
         self.sub = self.create_subscription(Twist, "cmd_vel", self.callback, 10)
         self.sub_2 = self.create_subscription(JointState, "wheel_states", self.callback_2, 10)
-        self.ang_dataframe  = pd.read_csv('csv/ang_wheel.csv')
-        self.vel_dataframe  = pd.read_csv('csv/vel_wheel.csv')
-        self.ang_vel_dataframe  = pd.read_csv('csv/ang_vel_wheel.csv')
+        self.ang_dataframe  = pd.read_csv('/home/eurekanuc/ros2_ws/src/eureka_movement_2/eureka_movement_2/csv/ang_wheel.csv')
+        self.vel_dataframe  = pd.read_csv('/home/eurekanuc/ros2_ws/src/eureka_movement_2/eureka_movement_2/csv/vel_wheel.csv')
+        self.ang_vel_dataframe  = pd.read_csv('/home/eurekanuc/ros2_ws/src/eureka_movement_2/eureka_movement_2/csv/ang_vel_wheel.csv')
         self.vel_wheel = [0] * 6
         self.vel_wheel_filt = [0] * 6
         self.ang_wheel = [0] * 6
         self.ang_wheel_filt = [0] * 6
         self.ang_vel_wheel = [0] * 6
+        self.vel_wheel_temp = [0] * 6
+        self.ang_vel_wheel_temp = [0] * 6
         self.l = [.41, 0, .385, .41, 0, .385]
         self.d = [.728, .780, .728, -.728, -.780, -.728]
         self.vel_lin = 0
@@ -63,14 +65,14 @@ class ackermann(Node):
                         break
          #   print("DONE")
             if(ang > 0):
-                self.vel_wheel[c1] = self.vel_dataframe[str(c1)][c2] * lin_vel_gain * self.vel_lin
-                self.ang_vel_wheel[c1] = self.ang_vel_dataframe[str(c1)][c2] * ang_vel_gain
+                self.vel_wheel_temp[c1] = self.vel_dataframe[str(c1)][c2] * lin_vel_gain * self.vel_lin
+                self.ang_vel_wheel_temp[c1] = self.ang_vel_dataframe[str(c1)][c2] * ang_vel_gain
             else:
-                self.vel_wheel[c1] = self.vel_dataframe[str(5 -c1)][99 - c2] * lin_vel_gain * self.vel_lin
-                self.ang_vel_wheel[c1] = self.ang_vel_dataframe[str(5 - c1)][99 - c2] * ang_vel_gain
-        self.vel_wheel[3] *= -1
-        self.vel_wheel[4] *= -1
-        self.vel_wheel[5] *= -1
+                self.vel_wheel_temp[c1] = self.vel_dataframe[str(5 -c1)][99 - c2] * lin_vel_gain * self.vel_lin
+                self.ang_vel_wheel_temp[c1] = self.ang_vel_dataframe[str(5 - c1)][99 - c2] * ang_vel_gain
+        self.vel_wheel_temp[3] *= -1
+        self.vel_wheel_temp[4] *= -1
+        self.vel_wheel_temp[5] *= -1
             
         
         print( self.vel_wheel)
@@ -99,6 +101,8 @@ class ackermann(Node):
                 for c in range(6):
                     None
      #               self.vel_wheel[c] = vel_lin / abs(rad) * sqrt(self.l[c]**2 + (rad + self.d[c]/2)**2)
+                    self.ang_vel_wheel = self.ang_vel_wheel_temp
+                    self.vel_wheel = self.vel_wheel_temp
                     self.ang_wheel[c] = atan(self.l[c]/ (rad + self.d[c] / 2)) * 180 / pi
                     if(c > 2):
                         None
@@ -108,7 +112,8 @@ class ackermann(Node):
                 None
                 for c in range(6):
                     None
-  #                  self.vel_wheel[c] = vel_lin * sqrt(self.l[c]**2 + (rad + self.d[c]/2)**2)
+                    self.ang_vel_wheel = [0.25] * 6
+                    self.vel_wheel[c] = self.vel_lin * sqrt(self.l[c]**2 + (rad + self.d[c]/2)**2)
                     self.ang_wheel[c] = atan(self.l[c]/ (rad + self.d[c] / 2)) * 180 / pi
 
         self.ang_wheel[0] *= -1
