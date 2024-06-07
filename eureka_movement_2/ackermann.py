@@ -16,6 +16,8 @@ import pandas as pd
 lin_vel_gain = 1
 ang_vel_gain = .25
 
+wheel_diameter = .2
+
 class ackermann(Node):
     def __init__(self):
         super().__init__('ackermann')
@@ -81,8 +83,8 @@ class ackermann(Node):
         
 
     def callback(self,data):
-        self.vel_lin = data.linear.x
-        vel_ang = data.angular.z
+        self.vel_lin = data.linear.x /(wheel_diameter * 3.14) # convert to revs/sec from m/s
+        vel_ang = -data.angular.z
         # go straingt
         
         if(vel_ang == 0):
@@ -113,7 +115,7 @@ class ackermann(Node):
                 for c in range(6):
                     None
                     self.ang_vel_wheel = [0.25] * 6
-                    self.vel_wheel[c] = self.vel_lin * sqrt(self.l[c]**2 + (rad + self.d[c]/2)**2)
+                    self.vel_wheel[c] = -self.vel_lin * sqrt(self.l[c]**2 + (rad + self.d[c]/2)**2)
                     self.ang_wheel[c] = atan(self.l[c]/ (rad + self.d[c] / 2)) * 180 / pi
 
         self.ang_wheel[0] *= -1
@@ -129,6 +131,8 @@ class ackermann(Node):
         for c in range (6):
             self.vel_wheel_filt[c] += step * (self.vel_wheel[c] - self.vel_wheel_filt[c])
         self.send()
+
+
 
 
 

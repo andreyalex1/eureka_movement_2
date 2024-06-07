@@ -37,11 +37,11 @@ class wheel_decoder(Node):
         message = JointState()
         message.name = ['DC1','DC2','DC3','DC4','DC5','DC6']
   #      print(self.velocities)
+        message.header.stamp = self.get_clock().now().to_msg()
         message.velocity = self.velocities
         message.effort = self.efforts
         message.position = self.positions
         self.pub.publish(message)
-    
 
 def main(args=None):
     rclpy.init()
