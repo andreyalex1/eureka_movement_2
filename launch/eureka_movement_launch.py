@@ -15,4 +15,10 @@ def generate_launch_description():
             name='wheel_decoder',
             shell=True,
         ),
+         Node(
+            package='eureka_movement_2',
+            executable='drivetrain_config',
+            name='drivetrain_config',
+            shell=True,
+        ),
     ])

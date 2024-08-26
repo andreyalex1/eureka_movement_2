@@ -14,7 +14,7 @@ import pandas as pd
 
 
 lin_vel_gain = 1
-ang_vel_gain = .25
+ang_vel_gain = .6
 
 wheel_diameter = .2
 
@@ -24,6 +24,7 @@ class ackermann(Node):
         self.pub = self.create_publisher(UInt8MultiArray, 'can_tx', 10)
         self.sub = self.create_subscription(Twist, "cmd_vel", self.callback, 10)
         self.sub_2 = self.create_subscription(JointState, "wheel_states", self.callback_2, 10)
+        self.pub_2 = self.create_publisher(JointState, "wheel_commads", 10)
         self.ang_dataframe  = pd.read_csv('/home/eurekanuc/ros2_ws/src/eureka_movement_2/eureka_movement_2/csv/ang_wheel.csv')
         self.vel_dataframe  = pd.read_csv('/home/eurekanuc/ros2_ws/src/eureka_movement_2/eureka_movement_2/csv/vel_wheel.csv')
         self.ang_vel_dataframe  = pd.read_csv('/home/eurekanuc/ros2_ws/src/eureka_movement_2/eureka_movement_2/csv/ang_vel_wheel.csv')
@@ -37,19 +38,26 @@ class ackermann(Node):
         self.l = [.41, 0, .385, .41, 0, .385]
         self.d = [.728, .780, .728, -.728, -.780, -.728]
         self.vel_lin = 0
+        self.send_ctr = 0
         timer_period = 0.05  # seconds
         self.timer = self.create_timer(timer_period, self.filter)
+        self.timer2 = self.create_timer(.015, self.send)
         self.get_logger().info("Ackermann Started!")
     def __del__(self):
         self.get_logger().info("Ackermann Killed!")
 
     def send(self):
-        for c in range(6):
-            msg = UInt8MultiArray()
-            arr = np.array([self.vel_wheel_filt[c], self.ang_wheel[c], self.ang_vel_wheel[c]], dtype = np.float16)
-            data = bytes([c + 11]) + arr.tobytes()
-            msg.data = data
-            self.pub.publish(msg)
+        msg = UInt8MultiArray()
+        arr = np.array([self.vel_wheel_filt[self.send_ctr], self.ang_wheel[self.send_ctr], self.ang_vel_wheel[self.send_ctr]], dtype = np.float16)
+        if(self.send_ctr == 1):
+            print(arr)
+        data = bytes([self.send_ctr + 11]) + arr.tobytes()
+        msg.data = data
+         #   print(data)
+        self.pub.publish(msg)
+        self.send_ctr += 1
+        self.send_ctr %= 6
+
 
     def callback_2(self,data):
         for c1 in range(0, 6):
@@ -114,7 +122,7 @@ class ackermann(Node):
                 None
                 for c in range(6):
                     None
-                    self.ang_vel_wheel = [0.25] * 6
+                    self.ang_vel_wheel = [0.8] * 6
                     self.vel_wheel[c] = -self.vel_lin * sqrt(self.l[c]**2 + (rad + self.d[c]/2)**2)
                     self.ang_wheel[c] = atan(self.l[c]/ (rad + self.d[c] / 2)) * 180 / pi
 
@@ -124,14 +132,24 @@ class ackermann(Node):
         self.ang_wheel[2] -= 0
         self.ang_wheel[3] += 2
         self.ang_wheel[5] -= 0
-        self.send()
+    #    self.send()
 
     def filter(self):
         step = 0.05
         for c in range (6):
             self.vel_wheel_filt[c] += step * (self.vel_wheel[c] - self.vel_wheel_filt[c])
-        self.send()
+    #    self.send()
+        self.publish_jointstate()
 
+    def publish_jointstate(self):
+        message = JointState()
+        message.name = ['DC1','DC2','DC3','DC4','DC5','DC6']
+  #      print(self.velocities)
+        message.header.stamp = self.get_clock().now().to_msg()
+        message.velocity = np.array(self.vel_wheel_filt, dtype=np.float32).tolist()
+        message.effort = [0.] * 6
+        message.position = np.array(self.ang_wheel, dtype=np.float32).tolist()
+        self.pub_2.publish(message)
 
 
 
