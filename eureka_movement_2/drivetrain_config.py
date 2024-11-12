@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 
 #Developed by Andrei Smirnov. 2024
 #MSU Rover Team. Voltbro. NIIMech 

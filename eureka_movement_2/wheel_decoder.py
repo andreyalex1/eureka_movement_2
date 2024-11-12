@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.10
 
 #Developed by Andrei Smirnov. 2024
 #MSU Rover Team. Voltbro. NIIMech 
@@ -17,6 +17,7 @@ class wheel_decoder(Node):
         self.velocities = [0.] * 6
         self.efforts = [0.] * 6
         self.positions = [0.] * 6
+        self.update - [0] * 6
         self.pub = self.create_publisher(JointState,'wheel_states', 10)
         self.sub = self.sub = self.create_subscription( UInt8MultiArray, "can_rx", self.callback, 10)
         timer_period = 0.05  # seconds
@@ -33,15 +34,18 @@ class wheel_decoder(Node):
             self.positions[index - 11] = float(temp)
             self.velocities[index - 11] = float(np.frombuffer(arr.data[1:3], dtype=np.float16)[0])
             self.efforts[index - 11] = float(np.frombuffer(arr.data[3:5], dtype=np.float16)[0])
+            self.update[index - 11] = 1
     def publisher(self):
-        message = JointState()
-        message.name = ['DC1','DC2','DC3','DC4','DC5','DC6']
-  #      print(self.velocities)
-        message.header.stamp = self.get_clock().now().to_msg()
-        message.velocity = self.velocities
-        message.effort = self.efforts
-        message.position = self.positions
-        self.pub.publish(message)
+        if(self.update == [1,1,1,1,1,1]):
+            self.update = [0] * 6
+            message = JointState()
+            message.name = ['DC1','DC2','DC3','DC4','DC5','DC6']
+    #      print(self.velocities)
+            message.header.stamp = self.get_clock().now().to_msg()
+            message.velocity = self.velocities
+            message.effort = self.efforts
+            message.position = self.positions
+            self.pub.publish(message)
 
 def main(args=None):
     rclpy.init()
