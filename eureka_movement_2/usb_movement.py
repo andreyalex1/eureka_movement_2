@@ -108,6 +108,7 @@ __end__'''
                 message.position = (np.array(self.stepper_pos_fb)* 180 / 3.14).tolist() 
                 self.pub.publish(message)
             except serial.serialutil.SerialException:
+                self.get_logger().warning("No USB FS Connection to Drivetrain!")
                 try:
                     self.right = serial.Serial('/dev/dc_right', 9600, timeout=1)
                     flag = 1
