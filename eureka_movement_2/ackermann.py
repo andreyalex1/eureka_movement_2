@@ -129,7 +129,7 @@ class ackermann(Node):
         self.ang_wheel[0] *= -1
         self.ang_wheel[3] *= -1
         self.ang_wheel[0] -= 2
-        self.ang_wheel[2] -= 0
+        self.ang_wheel[2] += 5
         self.ang_wheel[3] += 2
         self.ang_wheel[5] -= 0
     #    self.send()
