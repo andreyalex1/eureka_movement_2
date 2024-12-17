@@ -41,9 +41,11 @@ class ackermann(Node):
         self.d = [.728, .780, .728, -.728, -.780, -.728]
         self.vel_lin = 0
         self.send_ctr = 0
+        self.heartbeat_counter = 0
         timer_period = 0.01  # seconds
         self.timer = self.create_timer(timer_period, self.filter)
         self.timer2 = self.create_timer(.015, self.send)
+        self.timer3 = self.create_timer(.1, self.heartbeat_function)
         self.get_logger().info("Ackermann Started!")
     def __del__(self):
         self.get_logger().info("Ackermann Killed!")
@@ -91,6 +93,9 @@ class ackermann(Node):
         
 
     def callback(self,data):
+        #zero heartbeat counter as a new command ahas been received
+        self.heartbeat_counter = 0
+
         self.vel_lin = data.linear.x /(wheel_diameter /2) # convert to revs/sec from m/s
         vel_ang = -data.angular.z
         # go straingt
@@ -132,14 +137,6 @@ class ackermann(Node):
         self.ang_wheel[2] += 5
         self.ang_wheel[3] += 2
         self.ang_wheel[5] -= 0
-    #    self.send()
-
- #   def filter(self):
- #       step = 0.05
- #       for c in range (6):
- #           self.vel_wheel_filt[c] += step * (self.vel_wheel[c] - self.vel_wheel[c])
-    #    self.send()
- #       self.publish_jointstate()
 
     def filter(self):
         for c in range(6):
@@ -168,6 +165,14 @@ class ackermann(Node):
         message.velocity = np.array(self.vel_wheel_filt, dtype=np.float32).tolist()
         message.effort = [0.] * 6
         self.pub_3.publish(message)
+    
+    def heartbeat_function(self):
+        self.heartbeat_counter += 1
+   #     print(self.heartbeat_counter)
+        if(self.heartbeat_counter > 15):
+            self.vel_wheel = [0] * 6
+            self.ang_wheel = [0] * 6
+            self.ang_vel_wheel = [0] * 6
 
 
 

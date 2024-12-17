@@ -30,6 +30,7 @@ class usb_movement(Node):
         #feedback
         self.stepper_pos_fb = [0] * 6
         self.dc_vel_fb = [0] * 6
+        
         self.x = [h.ref(0) for i in range(20)]
         self.command_format = "global: heartbeat=%d, control_mode=%d, power_saving=%d gain_p=%.2f, gain_i=%.2f, gain_d=%.2f\r\n\
 wheel1: stepper_pos=%.2f, stepper_vel=%.2f, dc_vel=%.2f\r\n\
@@ -57,7 +58,9 @@ __end__'''
             except serial.serialutil.SerialException:
                 None
         timer_period = 0.05  # seconds
+        self.heartbeat_counter = 0
         self.timer = self.create_timer(timer_period, self.send)
+        self.timer3 = self.create_timer(.1, self.heartbeat_function)
         self.send()
         self.get_logger().info("usb_movement Started!")
     def __del__(self):
@@ -124,6 +127,7 @@ __end__'''
 
     def dc_callback(self,data):
     #    print("CALLBACK_DC")
+        self.heartbeat_counter = 0
         self.dc_vel_com = data.velocity
     def stepper_callback(self,data):
         self.stepper_pos_com = data.position
@@ -144,6 +148,14 @@ __end__'''
         message.effort = [0.] * 6
         message.position = np.array(self.ang_wheel, dtype=np.float32).tolist()
         self.pub.publish(message)
+    
+    def heartbeat_function(self):
+        self.heartbeat_counter += 1
+   #     print(self.heartbeat_counter)
+        if(self.heartbeat_counter > 15):
+            self.stepper_pos_com = [0] * 6
+            self.stepper_vel_com = [0] * 6
+            self.dc_vel_com = [0] * 6
 
 
 
