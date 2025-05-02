@@ -2,8 +2,6 @@
 
 #Developed by Andrei Smirnov. 2024
 #MSU Rover Team. Voltbro. NIIMech 
-
-"""
 from sensor_msgs.msg import JointState
 import numpy as np
 import rclpy
@@ -25,19 +23,19 @@ class usb_movement(Node):
         self.heartbeat = 1
         self.control_mode = 2
         self.power_saving = 0
-        self.gain_p = 0.35
-        self.gain_i = 0.2
-        self.gain_d = 0.05
-        self.stepper_pos_com = [0.] * 6
-        self.stepper_vel_com = [0.] * 6
-        self.dc_vel_com = [0.] * 6
+        self.gain_p = 0.003
+        self.gain_i = 0.002
+        self.gain_d = 0.0
+        self.stepper_pos_com = [0.] * 4
+        self.stepper_vel_com = [0.] * 4
+        self.dc_vel_com = [0.] * 4
         self.light_brightness_com = [0.0] * 2
         #feedback
-        self.stepper_pos_fb = [0.] * 6
-        self.dc_vel_fb = [0.] * 6
+        self.stepper_pos_fb = [0.] * 4
+        self.dc_vel_fb = [0.] * 4
         print("check1")
         self.x = [h.ref(0) for i in range(20)]
-        self.command_format = "global: heartbeat=%d, control_mode=%d, power_saving=%d gain_p=%.2f, gain_i=%.2f, gain_d=%.2f\r\n\
+        self.command_format = "global: heartbeat=%d, control_mode=%d, power_saving=%d gain_p=%.5f, gain_i=%.5f, gain_d=%.5f\r\n\
 wheel1: stepper_pos=%.2f, stepper_vel=%.2f, dc_vel=%.2f\r\n\
 wheel2: stepper_pos=%.2f, stepper_vel=%.2f, dc_vel=%.2f\r\n\
 __end__"
@@ -78,23 +76,23 @@ __end__'''
             print(self.right.isOpen())
             try:
                 message = self.command_format % (self.heartbeat, self.control_mode, self.power_saving, self.gain_p, self.gain_i, self.gain_d,
-                                                self.stepper_pos_com[3], 0.5, self.dc_vel_com[0] * 360 / 6.28,
-                                                self.stepper_pos_com[5], 0.5, self.dc_vel_com[2] * 360 / 6.28)
+                                                self.stepper_pos_com[1], self.stepper_vel_com[1] * 3.14 / 180, self.dc_vel_com[0],
+                                                self.stepper_pos_com[3], self.stepper_vel_com[3] * 3.14 / 180, self.dc_vel_com[2])
                 print(message)
                 print(self.right.write(bytes(message, encoding='utf8')))
                 reply = self.right.read_until(str.encode("__end__")).decode('utf-8')
                 print(reply)
                 
                 num = h.sscanf(reply, self.reply_format, self.x[0], self.x[1], self.x[2], self.x[3])
-                self.stepper_pos_fb[3] = float(self.x[0][0])
-                self.stepper_pos_fb[5] = float(self.x[2][0])
-                self.dc_vel_fb[3] = float(self.x[1][0])
-                self.dc_vel_fb[5] = float(self.x[3][0])
+                self.stepper_pos_fb[1] = float(self.x[0][0])
+                self.stepper_pos_fb[3] = float(self.x[2][0])
+                self.dc_vel_fb[1] = float(self.x[1][0])
+                self.dc_vel_fb[3] = float(self.x[3][0])
                 print(self.stepper_pos_fb)
                 print(len(self.command_format))
                 message = self.command_format % (self.heartbeat, self.control_mode, self.power_saving, self.gain_p, self.gain_i, self.gain_d,
-                                                self.stepper_pos_com[0], 0.5, self.dc_vel_com[3] * 360 / 6.28,
-                                                self.stepper_pos_com[2], 0.5, self.dc_vel_com[5] * 360 / 6.28)
+                                                self.stepper_pos_com[0], self.stepper_vel_com[0] * 3.14 / 180, self.dc_vel_com[1],
+                                                self.stepper_pos_com[2], self.stepper_vel_com[2] * 3.14 / 180, self.dc_vel_com[3])
                 print(message)
                 print(self.left.write(bytes(message, encoding='utf8')))
                 reply = self.left.read_until(str.encode("__end__")).decode('utf-8')
@@ -105,7 +103,7 @@ __end__'''
                 self.dc_vel_fb[0] = float(self.x[1][0])
                 self.dc_vel_fb[2] = float(self.x[3][0])
                 message = JointState()
-                message.name = ['DC1','DC2','DC3','DC4','DC5','DC6']
+                message.name = ['FL','FR','RL','RR']
                 message.header.stamp = self.get_clock().now().to_msg()
                 message.velocity = self.dc_vel_fb
                 message.effort = [0.] * 6
@@ -175,5 +173,3 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
-
-"""

@@ -24,10 +24,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-                'ackermann = eureka_movement_2.ackermann:main',
+                'ackermann_2 = eureka_movement_2.ackermann_2:main',
                 'wheel_decoder = eureka_movement_2.wheel_decoder:main',
                 'drivetrain_config = eureka_movement_2.drivetrain_config:main',
-                'usb_movement = eureka_movement_2.usb_movement:main',
+                'usb_movement_2 = eureka_movement_2.usb_movement_2:main',
         ],
     },
 )

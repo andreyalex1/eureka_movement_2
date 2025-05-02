@@ -2,7 +2,7 @@
 
 #Developed by Andrei Smirnov. 2024
 #MSU Rover Team. Voltbro. NIIMech 
-
+"""
 from geometry_msgs.msg import Twist
 from std_msgs.msg import UInt8MultiArray
 from sensor_msgs.msg import JointState
@@ -27,9 +27,9 @@ class ackermann(Node):
         self.pub_2 = self.create_publisher(JointState, "wheel_commands", 10)
         self.pub_3 = self.create_publisher(JointState, "dc_commands", 10)
         self.pub_4 = self.create_publisher(JointState, "stepper_commands", 10)
-        self.ang_dataframe  = pd.read_csv('/home/eurekanuc/ros2_ws/src/eureka_movement_2/eureka_movement_2/csv/ang_wheel.csv')
-        self.vel_dataframe  = pd.read_csv('/home/eurekanuc/ros2_ws/src/eureka_movement_2/eureka_movement_2/csv/vel_wheel.csv')
-        self.ang_vel_dataframe  = pd.read_csv('/home/eurekanuc/ros2_ws/src/eureka_movement_2/eureka_movement_2/csv/ang_vel_wheel.csv')
+        self.ang_dataframe  = pd.read_csv('/home/jetson/yahboom_ws/src/eureka_movement_2/eureka_movement_2/csv/ang_wheel.csv')
+        self.vel_dataframe  = pd.read_csv('/home/jetson/yahboom_ws/src/eureka_movement_2/eureka_movement_2/csv/vel_wheel.csv')
+        self.ang_vel_dataframe  = pd.read_csv('/home/jetson/yahboom_ws/src/eureka_movement_2/eureka_movement_2/csv/ang_vel_wheel.csv')
         self.vel_wheel = [0] * 6
         self.vel_wheel_filt = [0] * 6
         self.ang_wheel = [0] * 6
@@ -131,12 +131,8 @@ class ackermann(Node):
                     self.vel_wheel[c] = -self.vel_lin * sqrt(self.l[c]**2 + (rad + self.d[c]/2)**2)
                     self.ang_wheel[c] = atan(self.l[c]/ (rad + self.d[c] / 2)) * 180 / pi
 
-        self.ang_wheel[0] *= -1
-        self.ang_wheel[3] *= -1
-        self.ang_wheel[0] -= 2
-        self.ang_wheel[2] += 5
-        self.ang_wheel[3] += 2
-        self.ang_wheel[5] -= 0
+        self.ang_wheel[2] *= -1
+        self.ang_wheel[5] *= -1
 
     def filter(self):
         for c in range(6):
@@ -188,3 +184,5 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
+
+"""
