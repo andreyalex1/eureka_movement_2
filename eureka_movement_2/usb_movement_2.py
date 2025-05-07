@@ -9,6 +9,7 @@ from rclpy.node import Node
 import serial
 from neuron import h
 
+print("abracadabra")
 
 class usb_movement(Node):
     def __init__(self):
