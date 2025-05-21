@@ -58,7 +58,7 @@ class RoverKinematics:
         if max_error < 1e-3:  # Threshold to avoid division by zero
             # All errors are very small, no motion needed
             for wheel in self.wheel_positions:
-                steering_speeds[wheel] = 0.0
+                steering_speeds[wheel] =  max_steering_speed_deg_s
         else:
             for wheel, error in errors.items():
                 speed = (error / max_error) * max_steering_speed_deg_s
@@ -245,10 +245,11 @@ class ackermann(Node):
     def calculate_controls(self):
         if(self.turning_radius == None or abs(self.turning_radius) > track_width / 2 + 0.2):
             self.steering_angles = self.kinematics.compute_steering_targets(self.turning_radius)
-            self.steering_angles['FL'] += 8.0
-            self.steering_angles['FR'] -= 3.0
+            # last adjustment
+            self.steering_angles['FL'] += 5.0
+            self.steering_angles['FR'] -= 1.0
             self.drive_velocities = self.kinematics.compute_drive_velocities_from_steering(self.linear_velocity, self.current_steering_angles_deg)
-            self.steering_speeds = self.kinematics.compute_stepper_steering_velocities(self.steering_angles, self.current_steering_angles_deg, 40.0)
+            self.steering_speeds = self.kinematics.compute_stepper_steering_velocities(self.steering_angles, self.current_steering_angles_deg, 25.0)
         else:
             self.drive_velocities = {
             'FL': self.linear_velocity * 360.0 / (3.14 * wheel_diameter),
@@ -263,10 +264,10 @@ class ackermann(Node):
             'RR': 45.0,
             }
             self.steering_speeds = {
-            'FL': 40.0,
-            'FR': 40.0,
-            'RL': 40.0,
-            'RR': 40.0,
+            'FL': 25.0,
+            'FR': 25.0,
+            'RL': 25.0,
+            'RR': 25.0,
             }
 
     def send(self):
@@ -287,9 +288,9 @@ class ackermann(Node):
         return 1
 
     def filter(self):
-        filter_step = 1.0
+        filter_step = 2.0
         for key, value in self.drive_velocities.items():
-            if(abs(self.drive_velocities_filtered[key] - value) > filter_step * 1.9):
+            if(abs(self.drive_velocities_filtered[key] - value) > filter_step * 0.9):
                 if(self.drive_velocities_filtered[key] > value):
                     self.drive_velocities_filtered[key] -= filter_step
                 else:
