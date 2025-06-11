@@ -25,13 +25,14 @@ class usb_movement(Node):
         self.heartbeat = 1
         self.control_mode = 2
         self.power_saving = 0
-        self.gain_p = 0.003
+        self.gain_p = 0.002
         self.gain_i = 0.001
         self.gain_d = 0.0
         self.voltage_limit = 0.5
         self.stepper_pos_com = [0.] * 4
         self.stepper_vel_com = [0.] * 4
         self.dc_vel_com = [0.] * 4
+        self.steering_corrections = [6.5, -1.0, 3.0, -2.0]
         self.gripper_pulse = 0.0
         self.light_pulse = 0.0
         #feedback
@@ -114,7 +115,7 @@ __end__'''
                 message.header.stamp = self.get_clock().now().to_msg()
                 message.velocity = self.dc_vel_fb
                 message.effort = [0.] * 6
-                message.position = self.stepper_pos_fb
+                message.position = list(np.array(self.stepper_pos_fb) - np.array(self.steering_corrections));
                 message.position[0] -= 5.0
                 message.position[1] += 1.0
                 self.pub.publish(message)
@@ -138,7 +139,7 @@ __end__'''
         self.heartbeat_counter = 0
         self.dc_vel_com = data.velocity
     def stepper_callback(self,data):
-        self.stepper_pos_com = data.position
+        self.stepper_pos_com = list(np.array(data.position) + np.array(self.steering_corrections))
         self.stepper_vel_com = data.velocity
     def settings_callback(self,data):
         self.heartbeat = data.position[list(data.name).index('heartbeat')]

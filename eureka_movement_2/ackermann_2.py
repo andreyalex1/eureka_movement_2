@@ -73,7 +73,7 @@ class RoverKinematics:
      #   print(turning_radius)
         for wheel, (x, y) in self.wheel_positions.items(): 
             if(turning_radius == None):
-                drive_velocities[wheel] = linear_velocity * 360.0 / (3.14 * wheel_diameter)
+                drive_velocities[wheel] = linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter)
             else:
                 θ_deg = current_steering_angles_deg[wheel] 
                 θ_rad = math.radians(θ_deg) 
@@ -91,7 +91,7 @@ class RoverKinematics:
                 dot = dir_x * tangent_x + dir_y * tangent_y 
                 velocity_factor = dot / tangent_mag 
     
-                drive_velocities[wheel] = linear_velocity * velocity_factor * 360.0 / (3.14 * wheel_diameter)
+                drive_velocities[wheel] = linear_velocity * velocity_factor * 2 * 360.0 / (3.14 * wheel_diameter)
 
     #    print(drive_velocities)
         drive_velocities['FR'] *= -1
@@ -246,22 +246,23 @@ class ackermann(Node):
         if(self.turning_radius == None or abs(self.turning_radius) > track_width / 2 + 0.2):
             self.steering_angles = self.kinematics.compute_steering_targets(self.turning_radius)
             # last adjustment
-            self.steering_angles['FL'] += 5.0
-            self.steering_angles['FR'] -= 1.0
+     #       self.steering_angles['FL'] += 5.0
+     #       self.steering_angles['FR'] -= 1.0
             self.drive_velocities = self.kinematics.compute_drive_velocities_from_steering(self.linear_velocity, self.current_steering_angles_deg)
+        #    self.steering_speeds = {'FL':15.0, 'FR': 15.0, 'RL': 15.0, 'RR': 15.0}
             self.steering_speeds = self.kinematics.compute_stepper_steering_velocities(self.steering_angles, self.current_steering_angles_deg, 25.0)
         else:
             self.drive_velocities = {
-            'FL': self.linear_velocity * 360.0 / (3.14 * wheel_diameter),
-            'FR': self.linear_velocity * 360.0 / (3.14 * wheel_diameter),
-            'RL': self.linear_velocity * 360.0 / (3.14 * wheel_diameter),
-            'RR': self.linear_velocity * 360.0 / (3.14 * wheel_diameter),
+            'FL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+            'FR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+            'RL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+            'RR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
             }
             self.steering_angles = {
-            'FL': 45.0,
-            'FR': -45.0,
-            'RL': -45.0,
-            'RR': 45.0,
+            'FL': 39.0,
+            'FR': -39.0,
+            'RL': -39.0,
+            'RR': 39.0,
             }
             self.steering_speeds = {
             'FL': 25.0,
