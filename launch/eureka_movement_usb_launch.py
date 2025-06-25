@@ -8,11 +8,15 @@ def generate_launch_description():
             executable='ackermann_2',
             name='ackermann_2',
             shell=True,
+            respawn=True,
+            respawn_delay=10,
         ),
         Node(
             package='eureka_movement_2',
             executable='usb_movement_2',
             name='usb_movement_2',
             shell=True,
+            respawn=True,
+            respawn_delay=10,
         ),
     ])

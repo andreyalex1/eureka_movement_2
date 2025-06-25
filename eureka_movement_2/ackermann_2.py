@@ -289,7 +289,7 @@ class ackermann(Node):
         return 1
 
     def filter(self):
-        filter_step = 2.0
+        filter_step = 3.0
         for key, value in self.drive_velocities.items():
             if(abs(self.drive_velocities_filtered[key] - value) > filter_step * 0.9):
                 if(self.drive_velocities_filtered[key] > value):
