@@ -21,6 +21,14 @@ import math
 wheel_diameter = 0.3
 wheelbase = 0.76
 track_width = 0.94
+
+def clamp(n, min, max):
+    if n < min:
+        return min
+    elif n > max:
+        return max
+    else:
+        return n
  
 class RoverKinematics: 
     def __init__(self, wheelbase, track_width): 
@@ -99,22 +107,8 @@ class RoverKinematics:
         drive_velocities['FL'] *= -1
         drive_velocities['RL'] *= -1
         return drive_velocities 
- 
-    def compute_in_place_rotation(self, angular_velocity_rad_s): 
-        """ 
-        Compute wheel steering angles and drive velocities for in-place rotation. 
-        Positive angular velocity = counterclockwise. 
-        """ 
-        steering_angles = {} 
-        drive_velocities = {} 
-        for wheel, (x, y) in self.wheel_positions.items(): 
-            angle_rad = math.atan2(abs(y), abs(x)) + math.pi / 2  # perpendicular to radius 
-            steering_angles[wheel] = math.degrees(angle_rad) 
- 
-            radius = math.hypot(x, y) 
-            drive_velocities[wheel] = angular_velocity_rad_s * radius  # v = ω * r 
- 
-        return steering_angles, drive_velocities 
+
+
     
     def estimate_current_turning_radius(self, current_steering_angles_deg):
         """
@@ -175,9 +169,14 @@ class ackermann(Node):
         self.wheel_states_sub = self.create_subscription(JointState, "wheel_states", self.wheel_states_callback, 10)
         self.dc_commands_pub = self.create_publisher(JointState, "dc_commands", 10)
         self.stepper_commands_pub = self.create_publisher(JointState, "stepper_commands", 10)
+        #heartbeat
+        self.heartbeat_counter = 0
+        #strafe flag
+        self.strafe_falg = 0
         #received from cmd_vel
         self.linear_velocity = 0.0
-        self.turning_radius = 0.0
+        self.strafe_angle_deg = 0.0
+        self.turning_radius = None
         #command arrays
         self.drive_velocities = {
             'FL': 0.0,
@@ -215,7 +214,7 @@ class ackermann(Node):
         self.heartbeat_counter = 0
         self.timer = self.create_timer(0.01, self.filter)
         self.timer2 = self.create_timer(0.015, self.send)
-     #   self.timer3 = self.create_timer(0.1, self.heartbeat_function)
+        self.timer3 = self.create_timer(0.1, self.heartbeat_function)
         self.get_logger().info("Ackermann Started!")
     def __del__(self):
         self.get_logger().info("Ackermann Killed!")
@@ -233,43 +232,61 @@ class ackermann(Node):
             self.current_steering_angles_deg = angles_deg
 
     def cmd_vel_callback(self, message):
+        self.heartbeat_counter = 0
         self.linear_velocity = message.linear.x
+        self.strafe_angle_deg = message.linear.y
         inverse_turning_radius = message.angular.z
         if(abs(inverse_turning_radius) < 0.01):
             self.turning_radius = None
-        elif(abs(inverse_turning_radius) > 100):
+        elif(abs(inverse_turning_radius) > 20):
             self.turning_radius = 0.0
         else:
-            self.turning_radius = 1.0 / message.angular.z
+            self.turning_radius = 1.0 / clamp(message.angular.z, -1.4, 1.4)
 
     def calculate_controls(self):
-        if(self.turning_radius == None or abs(self.turning_radius) > track_width / 2 + 0.2):
-            self.steering_angles = self.kinematics.compute_steering_targets(self.turning_radius)
-            # last adjustment
-     #       self.steering_angles['FL'] += 5.0
-     #       self.steering_angles['FR'] -= 1.0
-            self.drive_velocities = self.kinematics.compute_drive_velocities_from_steering(self.linear_velocity, self.current_steering_angles_deg)
-        #    self.steering_speeds = {'FL':15.0, 'FR': 15.0, 'RL': 15.0, 'RR': 15.0}
-            self.steering_speeds = self.kinematics.compute_stepper_steering_velocities(self.steering_angles, self.current_steering_angles_deg, 25.0)
-        else:
+        if(abs(self.strafe_angle_deg) > 1):
             self.drive_velocities = {
-            'FL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-            'FR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-            'RL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-            'RR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'FL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'FR': -self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'RL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'RR': -self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
             }
             self.steering_angles = {
-            'FL': 39.0,
-            'FR': -39.0,
-            'RL': -39.0,
-            'RR': 39.0,
+                'FL': self.strafe_angle_deg,
+                'FR': self.strafe_angle_deg,
+                'RL': self.strafe_angle_deg,
+                'RR': self.strafe_angle_deg,
             }
             self.steering_speeds = {
-            'FL': 25.0,
-            'FR': 25.0,
-            'RL': 25.0,
-            'RR': 25.0,
+                'FL': 25.0,
+                'FR': 25.0,
+                'RL': 25.0,
+                'RR': 25.0,
             }
+        else:
+            if(self.turning_radius == None or abs(self.turning_radius) > track_width / 2 + 0.2):
+                self.steering_angles = self.kinematics.compute_steering_targets(self.turning_radius)
+                self.drive_velocities = self.kinematics.compute_drive_velocities_from_steering(self.linear_velocity, self.current_steering_angles_deg)
+                self.steering_speeds = self.kinematics.compute_stepper_steering_velocities(self.steering_angles, self.current_steering_angles_deg, 25.0)
+            else:
+                self.drive_velocities = {
+                'FL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'FR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'RL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'RR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                }
+                self.steering_angles = {
+                'FL': 39.0,
+                'FR': -39.0,
+                'RL': -39.0,
+                'RR': 39.0,
+                }
+                self.steering_speeds = {
+                'FL': 25.0,
+                'FR': 25.0,
+                'RL': 25.0,
+                'RR': 25.0,
+                }
 
     def send(self):
         self.calculate_controls()
@@ -297,6 +314,13 @@ class ackermann(Node):
                 else:
                     self.drive_velocities_filtered[key] += filter_step
         return 1
+
+    def heartbeat_function(self):
+        self.heartbeat_counter += 1
+  #      print(self.heartbeat_counter)
+        if(self.heartbeat_counter > 10):
+            self.turning_radius = None
+            self.linear_velocity = 0.0
 
 
 def main(args=None):
