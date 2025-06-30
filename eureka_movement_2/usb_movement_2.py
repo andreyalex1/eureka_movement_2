@@ -32,7 +32,7 @@ class usb_movement(Node):
         self.stepper_pos_com = [0.] * 4
         self.stepper_vel_com = [0.] * 4
         self.dc_vel_com = [0.] * 4
-        self.steering_corrections = [0.5, -1.0, 5.0, -2.0]
+        self.steering_corrections = [2.5, -1.0, 5.0, -2.0]
         self.gripper_pulse = 0.0
         self.light_pulse = 0.0
         #feedback

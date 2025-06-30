@@ -172,7 +172,7 @@ class ackermann(Node):
         #heartbeat
         self.heartbeat_counter = 0
         #strafe flag
-        self.strafe_falg = 0
+        self.strafe_angle_deg_estimated = 0.0
         #received from cmd_vel
         self.linear_velocity = 0.0
         self.strafe_angle_deg = 0.0
@@ -230,6 +230,10 @@ class ackermann(Node):
         # Only update if all expected joints are present
         if all(wheel in angles_deg for wheel in self.current_steering_angles_deg):
             self.current_steering_angles_deg = angles_deg
+            mean = 0
+            for key in self.current_steering_angles_deg:
+                mean += self.current_steering_angles_deg[key]
+            self.strafe_angle_deg_estimated = mean / len(self.current_steering_angles_deg)
 
     def cmd_vel_callback(self, message):
         self.heartbeat_counter = 0
@@ -244,7 +248,8 @@ class ackermann(Node):
             self.turning_radius = 1.0 / clamp(message.angular.z, -1.4, 1.4)
 
     def calculate_controls(self):
-        if(abs(self.strafe_angle_deg) > 1):
+     #   print(self.strafe_angle_deg_estimated)
+        if(abs(self.strafe_angle_deg) > 1 or abs(self.strafe_angle_deg_estimated) > 5):
             self.drive_velocities = {
                 'FL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
                 'FR': -self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
