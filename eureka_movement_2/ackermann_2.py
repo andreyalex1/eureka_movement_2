@@ -242,7 +242,7 @@ class ackermann(Node):
         inverse_turning_radius = message.angular.z
         if(abs(inverse_turning_radius) < 0.01):
             self.turning_radius = None
-        elif(abs(inverse_turning_radius) > 20):
+        elif(abs(inverse_turning_radius) > 90):
             self.turning_radius = 0.0
         else:
             self.turning_radius = 1.0 / clamp(message.angular.z, -1.4, 1.4)

@@ -38,7 +38,9 @@ class usb_movement(Node):
         #feedback
         self.stepper_pos_fb = [0.] * 4
         self.dc_vel_fb = [0.] * 4
-        print("check1")
+        #flags
+        self.left_connected = 0
+        self.right_connected = 0
         self.x = [h.ref(0) for i in range(20)]
         self.command_format = '''global: hrtb=%d, cm=%d, ps=%d, vl=%.2f, gp=%.4f, gi=%f, gd=%.4f\r\n\
 wheel1: stp_pos=%.2f, stp_vel=%.2f, dc_vel=%.2f\r\n\
@@ -48,26 +50,6 @@ __end__'''
         self.reply_format = '''wheel1: stepper_pos=%f,  dc_vel=%f\r\n\
 wheel2: stepper_pos=%f,  dc_vel=%f\r\n\
 __end__'''
-        print("check2")
-        flag = 0
-        while flag < 1:
-            print(flag)
-            try:
-                self.right = serial.Serial('/dev/dc_right', 9600, timeout=1)
-                flag = 1
-                continue
-            except serial.serialutil.SerialException:
-                None
-        flag = 0
-        print("got right")
-        while flag < 1:
-            try:
-                self.left = serial.Serial('/dev/dc_left', 9600, timeout=1)
-                flag = 1
-                continue
-            except serial.serialutil.SerialException:
-                None
-        print("got left")
         timer_period = 0.05  # seconds
         self.heartbeat_counter = 0
         self.timer = self.create_timer(timer_period, self.send)
@@ -78,18 +60,31 @@ __end__'''
         self.get_logger().info("usb_movement Killed!")
 
     def send(self):
-            print(self.left.isOpen())
-            print(self.right.isOpen())
+        if(self.left_connected < 1 or not self.left.isOpen()):
+            try:
+                self.left = serial.Serial('/dev/dc_left', 9600, timeout=1)
+                self.left_connected = 1
+            except:
+                self.get_logger().warning("No USB FS Connection to Left Side!")
+                self.left_connected = 0
+        if(self.right_connected < 1 or not self.right.isOpen()):
+            try:
+                self.right = serial.Serial('/dev/dc_right', 9600, timeout=1)
+                self.right_connected = 1
+            except:
+                self.get_logger().warning("No USB FS Connection to Right Side!")
+                self.right_connected = 0
+        if(self.left_connected > 0 and self.right_connected > 0 and self.left.isOpen() and self.right.isOpen()):
             try:
                 message = self.command_format % (self.heartbeat, self.control_mode, self.power_saving, self.voltage_limit, self.gain_p, self.gain_i, self.gain_d,
-                                                self.stepper_pos_com[1], self.stepper_vel_com[1], self.dc_vel_com[0],
-                                                self.stepper_pos_com[3], self.stepper_vel_com[3], self.dc_vel_com[2],
-                                                self.gripper_pulse)
+                                                    self.stepper_pos_com[1], self.stepper_vel_com[1], self.dc_vel_com[0],
+                                                    self.stepper_pos_com[3], self.stepper_vel_com[3], self.dc_vel_com[2],
+                                                    self.gripper_pulse)
                 print(message)
                 print(self.right.write(bytes(message, encoding='utf8')))
                 reply = self.right.read_until(str.encode("__end__")).decode('utf-8')
                 print(reply)
-                
+                    
                 num = h.sscanf(reply, self.reply_format, self.x[0], self.x[1], self.x[2], self.x[3])
                 self.stepper_pos_fb[1] = float(self.x[0][0])
                 self.stepper_pos_fb[3] = float(self.x[2][0])
@@ -97,10 +92,14 @@ __end__'''
                 self.dc_vel_fb[3] = float(self.x[3][0])
                 print(self.stepper_pos_fb)
                 print(len(self.command_format))
+            except:
+                self.get_logger().warning("Failed to send or receive message for right")
+                self.right_connected = 0
+            try:
                 message = self.command_format % (self.heartbeat, self.control_mode, self.power_saving, self.voltage_limit, self.gain_p, self.gain_i, self.gain_d,
-                                                self.stepper_pos_com[2], self.stepper_vel_com[2], self.dc_vel_com[3],
-                                                self.stepper_pos_com[0], self.stepper_vel_com[0], self.dc_vel_com[1],
-                                                -self.light_pulse)
+                                                    self.stepper_pos_com[2], self.stepper_vel_com[2], self.dc_vel_com[3],
+                                                    self.stepper_pos_com[0], self.stepper_vel_com[0], self.dc_vel_com[1],
+                                                    -self.light_pulse)
                 print(message)
                 print(self.left.write(bytes(message, encoding='utf8')))
                 reply = self.left.read_until(str.encode("__end__")).decode('utf-8')
@@ -119,19 +118,9 @@ __end__'''
                 message.position[0] -= 5.0
                 message.position[1] += 1.0
                 self.pub.publish(message)
-            except serial.serialutil.SerialException:
-                self.get_logger().warning("No USB FS Connection to Drivetrain!")
-                try:
-                    self.right = serial.Serial('/dev/dc_right', 9600, timeout=1)
-                    flag = 1
-                except serial.serialutil.SerialException:
-                    None
-                try:
-                    self.left = serial.Serial('/dev/dc_left', 9600, timeout=1)
-                    flag = 1
-                except serial.serialutil.SerialException:
-                    None
-                
+            except:
+                self.left_connected = 0
+                self.get_logger().warning("Failed to send or receive messages from left")
 
 
     def dc_callback(self,data):
