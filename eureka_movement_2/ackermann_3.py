@@ -29,7 +29,7 @@ def clamp(n, min, max):
 
 class RoverSteeringLookupTable:
     def __init__(self, wheelbase, track_width,
-                 max_steering_speed_deg_s=20.0,
+                 max_steering_speed_deg_s=25.0,
                  dt=0.05,
                  resolution=0.01,
                  max_radius=30.0
@@ -185,9 +185,6 @@ class RoverSteeringLookupTable:
             for i, entry in enumerate(self.lookup_table):
                 table_angle = entry['angles'][wheel]
                 error = abs(current_angle - table_angle)
-       #         print(wheel)
-        #        print(table_angle)
-      #          print(error)
                 if error < best_error:
                     best_error = error
                     best_index = i
@@ -261,6 +258,34 @@ class RoverSteeringLookupTable:
 
 
 
+    def get_drive_multipliers_per_wheel_from_angles(self, current_angles_deg):
+        """
+        For each wheel, find the lookup entry with the closest steering angle,
+        and return a dictionary of the corresponding drive multipliers.
+
+        Args:
+            current_angles_deg (dict): Current angles per wheel in degrees.
+            angle_threshold (float): Max deviation to count as 'straight'.
+
+        Returns:
+            dict: Drive multipliers per wheel, matched individually.
+        """
+
+        drive_multipliers = {}
+
+        for wheel in self.wheel_positions:
+            best_entry = None
+            best_error = float('inf')
+
+            for entry in self.lookup_table:
+                error = abs(entry['angles'][wheel] - current_angles_deg[wheel])
+                if error < best_error:
+                    best_error = error
+                    best_entry = entry
+
+            drive_multipliers[wheel] = best_entry['drive_multipliers'][wheel]
+
+        return drive_multipliers
 
 
     
@@ -317,6 +342,7 @@ class ackermann(Node):
         #kinematics class
         self.kinematics = RoverSteeringLookupTable(wheelbase, track_width)
         self.heartbeat_counter = 0
+        self.filter_step = 3.0
         self.timer = self.create_timer(0.01, self.filter)
         self.timer2 = self.create_timer(0.015, self.send)
         self.timer3 = self.create_timer(0.1, self.heartbeat_function)
@@ -354,20 +380,62 @@ class ackermann(Node):
 
     def calculate_controls(self):
         print("_________________________________")
-   #     print(self.turning_radius)
-    #    print(self.current_steering_angles_deg)
-
-        # Retrieve values from lookup table using new helper functions
-        self.steering_angles = self.kinematics.get_angles_for_radius(self.turning_radius)
-        self.drive_velocities = {
-            key: multiplier * self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter)
-            for key, multiplier in self.kinematics.get_drive_multipliers_for_radius(self.turning_radius).items()
-        }
-        self.drive_velocities["FL"] *= -1
-        self.drive_velocities["RL"] *= -1
-        self.steering_speeds = self.kinematics.compute_synchronized_steering_velocities_by_index(
-            self.turning_radius, self.current_steering_angles_deg
-        )
+        if(abs(self.strafe_angle_deg) > 1 or abs(self.strafe_angle_deg_estimated) > 5):
+            print("strafe")
+            self.filter_step = 1.0
+            self.drive_velocities = {
+                'FL': -self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'FR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'RL': -self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'RR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+            }
+            self.steering_angles = {
+                'FL': self.strafe_angle_deg,
+                'FR': self.strafe_angle_deg,
+                'RL': self.strafe_angle_deg,
+                'RR': self.strafe_angle_deg,
+            }
+            self.steering_speeds = {
+                'FL': 25.0,
+                'FR': 25.0,
+                'RL': 25.0,
+                'RR': 25.0,
+            }
+        else:
+            if(self.turning_radius == None or abs(self.turning_radius) > track_width / 2 + 0.2):
+                print("corner")
+                self.filter_step = 3.0
+                self.steering_angles = self.kinematics.get_angles_for_radius(self.turning_radius)
+                self.drive_velocities = {
+                    key: multiplier * self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter)
+                    for key, multiplier in self.kinematics.get_drive_multipliers_per_wheel_from_angles(self.current_steering_angles_deg).items()
+                }
+                self.drive_velocities["FL"] *= -1
+                self.drive_velocities["RL"] *= -1
+                self.steering_speeds = self.kinematics.compute_synchronized_steering_velocities_by_index(
+                    self.turning_radius, self.current_steering_angles_deg
+                )
+            else:
+                print("in-place")
+                self.filter_step = 1.0
+                self.drive_velocities = {
+                'FL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'FR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'RL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'RR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                }
+                self.steering_angles = {
+                'FL': 39.0,
+                'FR': -39.0,
+                'RL': -39.0,
+                'RR': 39.0,
+                }
+                self.steering_speeds = {
+                'FL': 25.0,
+                'FR': 25.0,
+                'RL': 25.0,
+                'RR': 25.0,
+                }
 
   #      print(self.steering_speeds)
 
@@ -391,13 +459,13 @@ class ackermann(Node):
         return 1
 
     def filter(self):
-        filter_step = 3.0
+   #     filter_step = 1.0
         for key, value in self.drive_velocities.items():
-            if(abs(self.drive_velocities_filtered[key] - value) > filter_step * 0.9):
+            if(abs(self.drive_velocities_filtered[key] - value) > self.filter_step * 0.9):
                 if(self.drive_velocities_filtered[key] > value):
-                    self.drive_velocities_filtered[key] -= filter_step
+                    self.drive_velocities_filtered[key] -= self.filter_step
                 else:
-                    self.drive_velocities_filtered[key] += filter_step
+                    self.drive_velocities_filtered[key] += self.filter_step
         return 1
 
     def heartbeat_function(self):
