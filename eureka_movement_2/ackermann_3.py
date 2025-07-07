@@ -3,20 +3,44 @@
 #Developed by Andrei Smirnov. 2024
 #MSU Rover Team. Voltbro. NIIMech 
 
-import math
+from geometry_msgs.msg import Twist
+from std_msgs.msg import UInt8MultiArray
+from sensor_msgs.msg import JointState
+import numpy as np
+from math import atan, sqrt, pi
+import rclpy
+from rclpy.node import Node
+#import pandas as pd
+import math 
+
+
+
+wheel_diameter = 0.3
+wheelbase = 0.76
+track_width = 0.94
+
+def clamp(n, min, max):
+    if n < min:
+        return min
+    elif n > max:
+        return max
+    else:
+        return n
 
 class RoverSteeringLookupTable:
     def __init__(self, wheelbase, track_width,
                  max_steering_speed_deg_s=20.0,
                  dt=0.05,
                  resolution=0.01,
-                 max_radius=10.0):
+                 max_radius=30.0
+                 , max_correction_deg_s=5.0):
         self.wheelbase = wheelbase
         self.track_width = track_width
         self.max_steering_speed_deg_s = max_steering_speed_deg_s
         self.dt = dt
         self.resolution = resolution
         self.max_radius = max_radius
+        self.max_steering_speed_deg_s = max_steering_speed_deg_s
 
         self.wheel_positions = {
             'FL': (+wheelbase / 2, +track_width / 2),
@@ -27,7 +51,7 @@ class RoverSteeringLookupTable:
 
         self.lookup_table = self._generate_lookup_table()
    #     for instance in self.lookup_table:
-     #       print(instance)
+   #         print(instance)
      #   self.print_lookup_table()
 
     def compute_steering_targets(self, turning_radius):
@@ -49,11 +73,14 @@ class RoverSteeringLookupTable:
 
         min_radius = max(self.track_width / 2 + 0.05, self.resolution)
         r = min_radius
+        prev_angles = None
         while r <= self.max_radius:
             angles = self.compute_steering_targets(r)
-
             # === Steering velocity scaling ===
-            raw_velocities = {wheel: angles[wheel] / 0.5 for wheel in self.wheel_positions}
+            if(prev_angles != None):
+                raw_velocities = {wheel: (angles[wheel] - prev_angles[wheel]) / 0.5 for wheel in self.wheel_positions}
+            else:
+                raw_velocities = {wheel: angles[wheel] / 0.5 for wheel in self.wheel_positions} #this will be dropped, its a dummy
             max_raw = max(abs(v) for v in raw_velocities.values())
             if max_raw < 1e-3:
                 scaled_velocities = {wheel: 0.0 for wheel in self.wheel_positions}
@@ -62,7 +89,7 @@ class RoverSteeringLookupTable:
                 scaled_velocities = {wheel: v * scale for wheel, v in raw_velocities.items()}
 
             # === Drive multipliers ===
-            drive_multipliers = {}
+            drive_multipliers_raw = {}
             for wheel, (x, y) in self.wheel_positions.items():
                 θ_deg = angles[wheel]
                 θ_rad = math.radians(θ_deg)
@@ -75,7 +102,7 @@ class RoverSteeringLookupTable:
                 r_x = x
                 r_y = y - r  # turning center at (0, r)
 
-                # Tangent direction at that point (perpendicular to radius vector)
+                # Tangent vector at that point
                 tangent_x = -r_y
                 tangent_y = r_x
 
@@ -86,101 +113,155 @@ class RoverSteeringLookupTable:
                     dot = dir_x * tangent_x + dir_y * tangent_y
                     velocity_factor = dot / tangent_mag
 
-                drive_multipliers[wheel] = velocity_factor
+                drive_multipliers_raw[wheel] = velocity_factor
+
+            # Normalize so platform velocity is preserved
+            mean_factor = sum(abs(m) for m in drive_multipliers_raw.values()) / len(drive_multipliers_raw)
+            if mean_factor < 1e-5:
+                normalized_drive_multipliers = {wheel: 0.0 for wheel in self.wheel_positions}
+            else:
+                scale = 1.0 / mean_factor
+                normalized_drive_multipliers = {wheel: m * scale for wheel, m in drive_multipliers_raw.items()}
+
 
             lookup_table.append({
                 'radius': r,
                 'angles': angles,
                 'velocities': scaled_velocities,
-                'drive_multipliers': drive_multipliers
+                'drive_multipliers': normalized_drive_multipliers
             })
 
+            prev_angles = angles
             r += self.resolution
-
-        # === Mirror for negative radii ===
-        mirrored_table = []
+        lookup_table = lookup_table [1::]
+        # === Mirror positive radii to negative radii ===
+        mirrored_entries = []
         for entry in lookup_table:
-            mirrored_table.append({
+            mirrored_entries.append({
                 'radius': -entry['radius'],
-                'angles': {"FL":-entry['angles']['FR'], "FR":-entry['angles']['FL'], "RL":-entry['angles']['RR'], "RR":-entry['angles']['RL']},
-                'velocities': {"FL":-entry['velocities']['FR'], "FR":-entry['velocities']['FL'], "RL":-entry['velocities']['RR'], "RR":-entry['velocities']['RL']},
-                'drive_multipliers': {"FL":entry['drive_multipliers']['FR'], "FR":-entry['drive_multipliers']['FL'], "RL":-entry['drive_multipliers']['RR'], "RR":-entry['drive_multipliers']['RL']},
+                'angles': {
+                    'FL': -entry['angles']['FR'],
+                    'FR': -entry['angles']['FL'],
+                    'RL': -entry['angles']['RR'],
+                    'RR': -entry['angles']['RL'],
+                },
+                'velocities': {
+                    'FL': entry['velocities']['FR'],
+                    'FR': entry['velocities']['FL'],
+                    'RL': entry['velocities']['RR'],
+                    'RR': entry['velocities']['RL'],
+                },
+                'drive_multipliers': {
+                    'FL': entry['drive_multipliers']['FR'],
+                    'FR': entry['drive_multipliers']['FL'],
+                    'RL': entry['drive_multipliers']['RR'],
+                    'RR': entry['drive_multipliers']['RL'],
+                }
             })
 
         # === Straight-line case ===
         zero_entry = {
             'radius': None,
             'angles': {w: 0.0 for w in self.wheel_positions},
-            'velocities': {w: 0.0 for w in self.wheel_positions},
+            'velocities': {w: 20.0 for w in self.wheel_positions},
             'drive_multipliers': {w: 1.0 for w in self.wheel_positions}
         }
 
-        return mirrored_table + [zero_entry] + lookup_table
+        return mirrored_entries[::-1] + [zero_entry] + lookup_table
 
 
-    def compute_steering_velocities(self, current_radius, current_motor_angles, Kp=0.5):
+    def compute_synchronized_steering_velocities_by_index(self, target_radius, current_angles_deg, Kp_index=0.5):
         """
-        Compute steering motor velocities based on desired radius and current motor angles.
-        Applies proportional control and scales so max motor uses full speed.
+        Synchronize all wheels based on their relative lookup table positions (indices), 
+        not angle errors. Applies time-based path synchronization.
         """
-        def radius_distance(r1, r2):
-            if r1 is None or r2 is None:
-                return 0 if r1 is None and r2 is None else float('inf')
-            return abs(r1 - r2)
+        # Step 1: For each wheel, find best-matching table index
+        wheel_indices = {}
+    #    print(current_angles_deg)
+        for wheel, current_angle in current_angles_deg.items():
+            best_index = None
+            best_error = float('inf')
 
-        # Find closest lookup entry
-        closest = min(self.lookup_table, key=lambda entry: radius_distance(entry['radius'], current_radius))
-        target_angles = closest['angles']
-        base_velocities = closest['velocities']
+            for i, entry in enumerate(self.lookup_table):
+                table_angle = entry['angles'][wheel]
+                error = abs(current_angle - table_angle)
+       #         print(wheel)
+        #        print(table_angle)
+      #          print(error)
+                if error < best_error:
+                    best_error = error
+                    best_index = i
 
+            wheel_indices[wheel] = best_index
+   #         print(self.lookup_table[wheel_indices[wheel]])
+
+        # Step 2: Compute average index
+        index_values = list(wheel_indices.values())
+        average_index = sum(index_values) / len(index_values)
+
+        print(index_values)
+        # Step 3: Get final entry for target radius (we still need the base velocities)
+
+        target_entry = min(self.lookup_table, key=lambda e: self._radius_distance(e['radius'], target_radius))
+
+        # Step 4: For each wheel, combine base velocity with correction
         raw_velocities = {}
-        for wheel in self.wheel_positions:
-            error = target_angles[wheel] - current_motor_angles.get(wheel, 0.0)
-            correction = Kp * error
-            raw_velocities[wheel] = base_velocities[wheel] + correction
+        for wheel, current_index in wheel_indices.items():
+            current_entry = self.lookup_table[current_index]
+            base_velocity = current_entry['velocities'][wheel]
+            current_radius = current_entry['radius']
 
-        # Scale so the fastest wheel uses full max velocity
+            if target_radius is None:
+                direction = -1.0  # Always steer toward straight
+            elif current_radius is None:
+                direction = 1.0   # Always steer away from straight
+            else:
+                # Positive if current is turning too wide or opposite direction
+                direction = 1.0 if (current_radius - target_radius) > 0 else -1.0
+
+
+            index_error = abs(average_index - current_index)
+            correction = Kp_index * index_error * direction
+
+            raw_velocities[wheel] = base_velocity #+ clamp(correction, -5.0, 5.0)
+
+        # Step 5: Scale so max wheel uses full allowed speed
         max_raw = max(abs(v) for v in raw_velocities.values())
         if max_raw < 1e-3:
             return {wheel: 0.0 for wheel in self.wheel_positions}
 
         scale = self.max_steering_speed_deg_s / max_raw
         scaled_velocities = {wheel: v * scale for wheel, v in raw_velocities.items()}
-
-        return raw_velocities
-
-
-#!/usr/bin/env python3
-
-#Developed by Andrei Smirnov. 2024
-#MSU Rover Team. Voltbro. NIIMech 
-
-from geometry_msgs.msg import Twist
-from std_msgs.msg import UInt8MultiArray
-from sensor_msgs.msg import JointState
-import numpy as np
-from math import atan, sqrt, pi
-import rclpy
-from rclpy.node import Node
-#import pandas as pd
+        return scaled_velocities
 
 
+    def get_angles_for_radius(self, radius):
+        """Return steering angles dict from the closest lookup entry."""
+        closest_entry = min(self.lookup_table, key=lambda e: self._radius_distance(e['radius'], radius))
+        return closest_entry['angles']
 
-import math 
+    def get_steering_velocities_for_radius(self, radius):
+        """Return base steering velocities from the closest lookup entry."""
+        closest_entry = min(self.lookup_table, key=lambda e: self._radius_distance(e['radius'], radius))
+        return closest_entry['velocities']
+
+    def get_drive_multipliers_for_radius(self, radius):
+        """Return linear velocity multipliers from the closest lookup entry."""
+        closest_entry = min(self.lookup_table, key=lambda e: self._radius_distance(e['radius'], radius))
+        return closest_entry['drive_multipliers']
+
+    def _radius_distance(self, r1, r2):
+        """Internal helper to handle None (straight line) and out-of-bounds radii."""
+        STRAIGHT_RADIUS = self.max_radius + 1.0  # Treat None as large-radius straight-line motion
+
+        r1_val = STRAIGHT_RADIUS if r1 is None else r1
+        r2_val = STRAIGHT_RADIUS if r2 is None else r2
+
+        return abs(r1_val - r2_val)
 
 
 
-wheel_diameter = 0.3
-wheelbase = 0.76
-track_width = 0.94
 
-def clamp(n, min, max):
-    if n < min:
-        return min
-    elif n > max:
-        return max
-    else:
-        return n
 
     
 
@@ -200,7 +281,7 @@ class ackermann(Node):
         self.linear_velocity = 0.0
         self.strafe_angle_deg = 0.0
         self.turning_radius = None
-        self.turning_radius_filtered = 0.0
+        self.turning_radius = 0.0
         #command arrays
         self.drive_velocities = {
             'FL': 0.0,
@@ -237,7 +318,6 @@ class ackermann(Node):
         self.kinematics = RoverSteeringLookupTable(wheelbase, track_width)
         self.heartbeat_counter = 0
         self.timer = self.create_timer(0.01, self.filter)
-        self.timer4 = self.create_timer(0.01, self.radius_filter_function)
         self.timer2 = self.create_timer(0.015, self.send)
         self.timer3 = self.create_timer(0.1, self.heartbeat_function)
         self.get_logger().info("Ackermann Started!")
@@ -274,17 +354,23 @@ class ackermann(Node):
 
     def calculate_controls(self):
         print("_________________________________")
-        print(self.turning_radius_filtered)
-        if(self.turning_radius != None):
-            print(self.current_steering_angles_deg)
-            closest_entry = min(self.kinematics.lookup_table, key=lambda e: abs((e['radius'] or 1e9) - self.turning_radius_filtered))
-            print(closest_entry)
-            drive_multipliers = closest_entry['drive_multipliers']
-            closest_entry = min(self.kinematics.lookup_table, key=lambda e: abs((e['radius'] or 1e9) - self.turning_radius))
-            self.steering_angles = closest_entry['angles']
-            self.drive_velocities = multiplied_dict = {key: value * self.linear_velocity for key, value in drive_multipliers.items()}
-            self.steering_speeds = self.kinematics.compute_steering_velocities(self.turning_radius_filtered, self.current_steering_angles_deg)
-            print(self.steering_speeds)
+   #     print(self.turning_radius)
+    #    print(self.current_steering_angles_deg)
+
+        # Retrieve values from lookup table using new helper functions
+        self.steering_angles = self.kinematics.get_angles_for_radius(self.turning_radius)
+        self.drive_velocities = {
+            key: multiplier * self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter)
+            for key, multiplier in self.kinematics.get_drive_multipliers_for_radius(self.turning_radius).items()
+        }
+        self.drive_velocities["FL"] *= -1
+        self.drive_velocities["RL"] *= -1
+        self.steering_speeds = self.kinematics.compute_synchronized_steering_velocities_by_index(
+            self.turning_radius, self.current_steering_angles_deg
+        )
+
+  #      print(self.steering_speeds)
+
            
 
     def send(self):
@@ -313,27 +399,6 @@ class ackermann(Node):
                 else:
                     self.drive_velocities_filtered[key] += filter_step
         return 1
-
-    def radius_filter_function(self):
-        if self.turning_radius is None:
-        #    self.turning_radius_filtered = 1e9  # Simulate straight motion
-            return
-
-        # Current and target inverse radii
-        current_inv = 1.0 / self.turning_radius_filtered if abs(self.turning_radius_filtered) > 1e-5 else 0.0
-        target_inv = 1.0 / self.turning_radius if abs(self.turning_radius) > 1e-5 else 0.0
-
-        # Nonlinear gain scaling (faster when small radius)
-        alpha = 0.002 + 0.002 * min(1.0, abs(target_inv) / 1.0)  # max gain = 0.22, min = 0.02
-
-        # Low-pass filter in inverse radius space
-        filtered_inv = (1 - alpha) * current_inv + alpha * target_inv
-
-        # Prevent divide by zero
-        if abs(filtered_inv) < 1e-5:
-            self.turning_radius_filtered = 1e9  # practically straight
-        else:
-            self.turning_radius_filtered = 1.0 / filtered_inv
 
     def heartbeat_function(self):
         self.heartbeat_counter += 1

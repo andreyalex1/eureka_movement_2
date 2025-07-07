@@ -5,8 +5,8 @@ def generate_launch_description():
     return LaunchDescription([
         Node(
             package='eureka_movement_2',
-            executable='ackermann_2',
-            name='ackermann_2',
+            executable='ackermann_3',
+            name='ackermann_3',
             shell=True,
             respawn=True,
             respawn_delay=10,
