@@ -25,14 +25,14 @@ class usb_movement(Node):
         self.heartbeat = 1
         self.control_mode = 2
         self.power_saving = 0
-        self.gain_p = 0.003
-        self.gain_i = 0.001
+        self.gain_p = 0.0040
+        self.gain_i = 0.0020
         self.gain_d = 0.0
         self.voltage_limit = 0.95
         self.stepper_pos_com = [0.] * 4
         self.stepper_vel_com = [0.] * 4
         self.dc_vel_com = [0.] * 4
-        self.steering_corrections = [2.5, 0.0, 5.0, -2.0]
+        self.steering_corrections = [0.0, 0.0, 0.0, 0.0]
         self.gripper_pulse = 0.0
         self.light_pulse = 0.0
         #feedback
@@ -77,9 +77,9 @@ __end__'''
         if(self.left_connected > 0 and self.right_connected > 0 and self.left.isOpen() and self.right.isOpen()):
             try:
                 message = self.command_format % (self.heartbeat, self.control_mode, self.power_saving, self.voltage_limit, self.gain_p, self.gain_i, self.gain_d,
-                                                    self.stepper_pos_com[1], self.stepper_vel_com[1], self.dc_vel_com[1],
-                                                    self.stepper_pos_com[3], self.stepper_vel_com[3], self.dc_vel_com[3],
-                                                    self.gripper_pulse)
+                                                    self.stepper_pos_com[1], self.stepper_vel_com[1], -self.dc_vel_com[1],
+                                                    self.stepper_pos_com[3], self.stepper_vel_com[3], -self.dc_vel_com[3],
+                                                    -self.light_pulse)
                 print(message)
                 print(self.right.write(bytes(message, encoding='utf8')))
                 reply = self.right.read_until(str.encode("__end__")).decode('utf-8')
@@ -88,8 +88,8 @@ __end__'''
                 num = h.sscanf(reply, self.reply_format, self.x[0], self.x[1], self.x[2], self.x[3])
                 self.stepper_pos_fb[1] = float(self.x[0][0])
                 self.stepper_pos_fb[3] = float(self.x[2][0])
-                self.dc_vel_fb[1] = float(self.x[1][0])
-                self.dc_vel_fb[3] = float(self.x[3][0])
+                self.dc_vel_fb[1] = -float(self.x[1][0])
+                self.dc_vel_fb[3] = -float(self.x[3][0])
                 print(self.stepper_pos_fb)
                 print(len(self.command_format))
             except:
@@ -97,18 +97,18 @@ __end__'''
                 self.right_connected = 0
             try:
                 message = self.command_format % (self.heartbeat, self.control_mode, self.power_saving, self.voltage_limit, self.gain_p, self.gain_i, self.gain_d,
-                                                    self.stepper_pos_com[2], self.stepper_vel_com[2], self.dc_vel_com[2],
-                                                    self.stepper_pos_com[0], self.stepper_vel_com[0], self.dc_vel_com[0],
-                                                    -self.light_pulse)
+                                                    self.stepper_pos_com[0], self.stepper_vel_com[0], -self.dc_vel_com[0],
+                                                    self.stepper_pos_com[2], self.stepper_vel_com[2], -self.dc_vel_com[2],
+                                                    -self.gripper_pulse)
                 print(message)
                 print(self.left.write(bytes(message, encoding='utf8')))
                 reply = self.left.read_until(str.encode("__end__")).decode('utf-8')
                 print(reply)
                 num = h.sscanf(reply, self.reply_format, self.x[0], self.x[1], self.x[2], self.x[3])
-                self.stepper_pos_fb[0] = float(self.x[2][0])
-                self.stepper_pos_fb[2] = float(self.x[0][0])
-                self.dc_vel_fb[0] = float(self.x[3][0])
-                self.dc_vel_fb[2] = float(self.x[1][0])
+                self.stepper_pos_fb[0] = float(self.x[0][0])
+                self.stepper_pos_fb[2] = float(self.x[2][0])
+                self.dc_vel_fb[0] = -float(self.x[3][0])
+                self.dc_vel_fb[2] = -float(self.x[1][0])
                 message = JointState()
                 message.name = ['FL','FR','RL','RR']
                 message.header.stamp = self.get_clock().now().to_msg()
