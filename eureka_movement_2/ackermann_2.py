@@ -84,7 +84,7 @@ class RoverKinematics:
      #   print(turning_radius)
         for wheel, (x, y) in self.wheel_positions.items(): 
             if(turning_radius == None):
-                drive_velocities[wheel] = linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter)
+                drive_velocities[wheel] = linear_velocity * 2 * 180.0 / (3.14 * wheel_diameter)
             else:
                 θ_deg = current_steering_angles_deg[wheel] 
                 θ_rad = math.radians(θ_deg) 
@@ -102,7 +102,7 @@ class RoverKinematics:
                 dot = dir_x * tangent_x + dir_y * tangent_y 
                 velocity_factor = dot / tangent_mag 
     
-                drive_velocities[wheel] = linear_velocity * velocity_factor * 2 * 360.0 / (3.14 * wheel_diameter)
+                drive_velocities[wheel] = linear_velocity * velocity_factor * 2 * 180.0 / (3.14 * wheel_diameter)
 
     #    print(drive_velocities)
         drive_velocities['FR'] *= -1
@@ -254,10 +254,10 @@ class ackermann(Node):
      #   print(self.strafe_angle_deg_estimated)
         if(abs(self.strafe_angle_deg) > 1 or abs(self.strafe_angle_deg_estimated) > 5):
             self.drive_velocities = {
-                'FL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'FR': -self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'RL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'RR': -self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'FL': self.linear_velocity * 2 * 180.0 / (3.14 * wheel_diameter),
+                'FR': -self.linear_velocity * 2 * 180.0 / (3.14 * wheel_diameter),
+                'RL': self.linear_velocity * 2 * 180.0 / (3.14 * wheel_diameter),
+                'RR': -self.linear_velocity * 2 * 180.0 / (3.14 * wheel_diameter),
             }
             self.steering_angles = {
                 'FL': self.strafe_angle_deg,
@@ -278,10 +278,10 @@ class ackermann(Node):
                 self.steering_speeds = self.kinematics.compute_stepper_steering_velocities(self.steering_angles, self.current_steering_angles_deg, 25.0)
             else:
                 self.drive_velocities = {
-                'FL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'FR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'RL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'RR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'FL': self.linear_velocity * 2 * 180.0 / (3.14 * wheel_diameter),
+                'FR': self.linear_velocity * 2 * 180.0 / (3.14 * wheel_diameter),
+                'RL': self.linear_velocity * 2 * 180.0 / (3.14 * wheel_diameter),
+                'RR': self.linear_velocity * 2 * 180.0 / (3.14 * wheel_diameter),
                 }
                 self.steering_angles = {
                 'FL': 39.0,

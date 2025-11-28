@@ -43,10 +43,10 @@ class RoverSteeringLookupTable:
         self.max_steering_speed_deg_s = max_steering_speed_deg_s
 
         self.wheel_positions = {
-            'FL': (+wheelbase / 2, +track_width / 2),
-            'FR': (+wheelbase / 2, -track_width / 2),
-            'RL': (-wheelbase / 2, +track_width / 2),
-            'RR': (-wheelbase / 2, -track_width / 2)
+            'FL': (+self.wheelbase / 2, +self.track_width / 2),
+            'FR': (+self.wheelbase / 2, -self.track_width / 2),
+            'RL': (-self.wheelbase / 2, +self.track_width / 2),
+            'RR': (-self.wheelbase / 2, -self.track_width / 2)
         }
 
         self.lookup_table = self._generate_lookup_table()
@@ -312,10 +312,14 @@ class RoverSteeringLookupTable:
 
 
 class ackermann(Node):
-    def __init__(self):
+    def __init__(self, wheel_diameter, wheelbase, track_width):
         super().__init__('ackermann')
+        self.wheel_diameter = wheel_diameter
+        self.wheelbase = wheelbase
+        self.track_width = track_width
         self.cmd_vel_sub = self.create_subscription(Twist, "cmd_vel", self.cmd_vel_callback, 10)
         self.wheel_states_sub = self.create_subscription(JointState, "wheel_states", self.wheel_states_callback, 10)
+        self.wheel_settings_sub = self.create_subscription(JointState, "wheel_settings", self.wheel_settings_callback, 10)
         self.dc_commands_pub = self.create_publisher(JointState, "dc_commands", 10)
         self.stepper_commands_pub = self.create_publisher(JointState, "stepper_commands", 10)
         #heartbeat
@@ -327,6 +331,8 @@ class ackermann(Node):
         self.strafe_angle_deg = 0.0
         self.turning_radius = None
         self.turning_radius = 0.0
+        #received from wheel_settings
+        self.autonomous_mode = 0
         #command arrays
         self.drive_velocities = {
             'FL': 0.0,
@@ -360,7 +366,8 @@ class ackermann(Node):
             'RR': 0.0,
         }
         #kinematics class
-        self.kinematics = RoverSteeringLookupTable(wheelbase, track_width)
+        self.max_steering_speed_deg_s = 15.0
+        self.kinematics = RoverSteeringLookupTable(self.wheelbase, self.track_width)
         self.heartbeat_counter = 0
         self.filter_step = 1.0
         self.timer = self.create_timer(0.01, self.filter)
@@ -398,16 +405,23 @@ class ackermann(Node):
         else:
             self.turning_radius = 1.0 / clamp(message.angular.z, -1.4, 1.4)
 
+    def wheel_settings_callback(self, message):
+        idx = message.name.index("autonomous_mode")
+        self.autonomous_mode = message.position[idx]
+        return
+
     def calculate_controls(self):
         print("_________________________________")
-        if(abs(self.strafe_angle_deg) > 1 or abs(self.strafe_angle_deg_estimated) > 15):
+        print(self.autonomous_mode)
+        #strafe, only for remote control
+        if((abs(self.strafe_angle_deg) > 1 or abs(self.strafe_angle_deg_estimated) > 15) and self.autonomous_mode == 0):
             print("strafe")
             self.filter_step = 2.0
             self.drive_velocities = {
-                'FL': -self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'FR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'RL': -self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'RR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'FL': -self.linear_velocity * 2 * 180.0 / (3.14 * self.wheel_diameter),
+                'FR': self.linear_velocity * 2 * 180.0 / (3.14 * self.wheel_diameter),
+                'RL': -self.linear_velocity * 2 * 180.0 / (3.14 * self.wheel_diameter),
+                'RR': self.linear_velocity * 2 * 180.0 / (3.14 * self.wheel_diameter),
             }
             self.steering_angles = {
                 'FL': self.strafe_angle_deg,
@@ -422,12 +436,13 @@ class ackermann(Node):
                 'RR': 15.0,
             }
         else:
-            if(self.turning_radius == None or abs(self.turning_radius) > track_width / 2 + 0.2):
+            #regular corner, can be in autonomous
+            if(self.turning_radius == None or abs(self.turning_radius) > self.track_width / 2 + 0.2):
                 print("corner")
                 self.filter_step = 2.0
                 self.steering_angles = self.kinematics.get_angles_for_radius(self.turning_radius)
                 self.drive_velocities = {
-                    key: multiplier * self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter)
+                    key: multiplier * self.linear_velocity * 2 * 180.0 / (3.14 * self.wheel_diameter)
                     for key, multiplier in self.kinematics.get_drive_multipliers_per_wheel_from_angles(self.current_steering_angles_deg).items()
                 }
                 self.drive_velocities["FL"] *= -1
@@ -435,14 +450,15 @@ class ackermann(Node):
                 self.steering_speeds = self.kinematics.compute_synchronized_steering_velocities_by_index(
                     self.turning_radius, self.current_steering_angles_deg
                 )
-            else:
+            #in-place rotation, remote control only
+            elif(self.autonomous_mode == 0):
                 print("in-place")
                 self.filter_step = 2.0
                 self.drive_velocities = {
-                'FL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'FR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'RL': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
-                'RR': self.linear_velocity * 2 * 360.0 / (3.14 * wheel_diameter),
+                'FL': self.linear_velocity * 2 * 180.0 / (3.14 * self.wheel_diameter),
+                'FR': self.linear_velocity * 2 * 180.0 / (3.14 * self.wheel_diameter),
+                'RL': self.linear_velocity * 2 * 180.0 / (3.14 * self.wheel_diameter),
+                'RR': self.linear_velocity * 2 * 180.0 / (3.14 * self.wheel_diameter),
                 }
                 self.steering_angles = {
                 'FL': 39.0,
@@ -456,10 +472,22 @@ class ackermann(Node):
                 'RL': 15.0,
                 'RR': 15.0,
                 }
-
+        self.normalize_steering_speeds()
   #      print(self.steering_speeds)
 
-           
+    def normalize_steering_speeds(self):
+        max_raw = max(abs(v) for v in self.steering_speeds.values())
+        if max_raw < 1e-3:
+            return 
+
+        scale = self.max_steering_speed_deg_s / max_raw
+        self.steering_speeds = {
+                'FL': self.steering_speeds['FL'] * scale,
+                'FR': self.steering_speeds['FR'] * scale,
+                'RL': self.steering_speeds['RL'] * scale,
+                'RR': self.steering_speeds['RR'] * scale
+                }
+
 
     def send(self):
         self.calculate_controls()
@@ -498,7 +526,7 @@ class ackermann(Node):
 
 def main(args=None):
     rclpy.init()
-    ack = ackermann()
+    ack = ackermann(wheel_diameter, wheelbase, track_width)
     rclpy.spin(ack)
 
     
